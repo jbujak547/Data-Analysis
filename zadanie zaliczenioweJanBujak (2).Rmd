@@ -1,0 +1,186 @@
+---
+title: "Zadanie zaliczeniowe Octanes"
+author: "Jan Bujak"
+date: "2024-01-02"
+output: html_document
+---
+
+#### Dla testów statystycznych zostanie przyjęty poziom istotności statystycznej 0,05.
+
+
+## Wgranie i Przegląd Danych
+
+Wczytanie zbioru danych "octanes" przy pomocy metody read.table
+
+```{r}
+options(scipen=5)
+library(knitr)
+octanes <- read.table('https://mimuw.edu.pl/~szym/octanes.csv', stringsAsFactors = TRUE, sep=';', header = 1)
+kable(octanes, caption = 'Octanes')
+summary(octanes)
+```
+
+
+Dodanie do tabeli octanes kolumny zawierającej informacje o ilości litrów spalanej przez 100 km oraz kolumny zawierającej informacje o średniej ilości awarii silnika na 1000000km.
+```{r}
+litre_100km <- octanes$number_of_litres / octanes$number_of_km * 100
+octanes$litre_100km <- litre_100km
+octanes$failures_per_1000000km <- octanes$failures_count / octanes$number_of_km * 1000000
+```
+
+### Wartości odstające oraz brakujące dane
+W posumowaniu tabeli 'octanes' widać, że wszystkie puste komórki znajdują się w kolumnie z nazwiskami kierowców, która nie będzie przedmiotem analizy, więc można usunąć całą kolumne, razem ze wszystkimi pustymi komórkami.
+
+```{r}
+octanes <- octanes[, -5]
+```
+Podział zbioru octanes na 2 tabele w zależności od uzywanego paliwa.
+```{r}
+normal_gas <- octanes[octanes$fuel_type == 'normal gas', ]
+tweaked_gas <- octanes[octanes$fuel_type == 'tweaked gas', ]
+```
+Usunięcie wiersza 34, jako że liczba przejechanych kilometrów wynosi w nim 0.
+```{r}
+normal_gas <- normal_gas [-34,]
+```
+
+Usunięcie wiersza 87, jako że spalanie jest w nim prawie 2 razy mniejsze niż drugie najmniejsze spalanie.
+```{r}
+tweaked_gas <- tweaked_gas[-87,]
+```
+```{r}
+kable(normal_gas, caption = 'Paliwo zwykłe')
+kable(tweaked_gas, caption = 'Paliwo podrasowane')
+```
+## Sprawdzenie czy podrasowane paliwo rzeczywiście pozwala przejechać więcej km na jednym baku.
+
+
+Narysownie wykresu, żeby sprawdzić rozkład wartości spalania dla danego paliwa.
+```{r}
+plot(density(normal_gas$litre_100km), main = "Spalanie na danym paliwie", col='green', xlab = 'Ilość spalonych litrów na 100 km')
+lines(density(tweaked_gas$litre_100km), col= "red")
+legend(8.6, 0.6, legend= c('Paliwo zwykłe', 'Paliwo podrasowane'), col=c('green','red'),lty = 1:1)
+
+```
+
+
+
+Z wykresu wynika, że spalanie na podrasowanym paliwie jest rzeczywiście mniejsze. Jednak, żeby potwierdzić tę tezę trzeba przeprowadzić odpowiedni test statystyczny.
+
+### Najpierw przeprowadzony zostaje test Shapiro-Wilka, w celu stwierdzenia czy rozkłady są normalne.
+
+#### **Hipoteza zerowa - próba badawcza pochodzi z populacji o rozkładzie normalnym.**
+#### **Hipoteza alternatywna - próba badawcza nie pochodzi z populacji o rozkładzie normalnym.**
+```{r}
+shapiro.test(tweaked_gas$litre_100km)
+shapiro.test(normal_gas$litre_100km)
+
+```
+W obu testach p jest większe niż 0,05, więc można przyjąć hipotezę zerową, że rozkłady są normalne.
+Dla przetestowania czy spalanie na podrasowanym paliwie jest mniejsze zostanie więc użyty test t-studenta.
+
+### Test t-studenta
+
+#### Hipoteza zerowa - Spalanie dla podrasowanego paliwa jest takie samo jak dla zwykłego.
+#### Hipoteza alternatywa - Spalanie dla podrasowanego paliwa jest mniejsze niż dla zwykłego.
+
+```{r}
+t.test(tweaked_gas$litre_100km, normal_gas$litre_100km, alternative='less')
+
+```
+Wartość p jest mniejsza niż 0,05, więc odrzucamy hipotezę zerową i przyjmujemy hipotezę alternatywną, że podrasowane paliwo pozwala przejechać średio więcej kilometrów na jednym baku niż zwykłe w istotnym statystycznie stopniu.
+
+## Sprawdzenie czy podrasowane paliwo zwiększa awaryjność silnika.
+
+Sprawdzenie, czy ilość kilometrów przejechana na obu paliwach jest taka sama.
+```{r}
+
+sum_km_normal <- sum(normal_gas$number_of_km)
+sum_km_tweaked <- sum(tweaked_gas$number_of_km)
+sum_km_normal - sum_km_tweaked
+```
+Trzeba odnotować, że suma kilometrów przejechanych na paliwie zwykłych jest większa niż na paliwie podrasowanym, jednak jeżeli z testu statystycznego wyjdzie, że paliwo podrasowane jest bardziej awariogenne nie powinno to mieć znaczenia.
+
+Narysowanie wykresu wiolinowego średnich liczby awarii na 1000000km na danym paliwie.
+```{r}
+library(vioplot)
+vioplot(list('Zwykłe' = normal_gas$failures_per_1000000km, 'Podrasowane' = tweaked_gas$failures_per_1000000km), col= c('lightblue', 'lightgreen'), ylab='Średnia liczba awarii na 1000000km')
+
+
+```
+
+
+
+
+Wykresy pozwalaja przypuszcać, że paliwo podrasowane jest bardziej awariogenne. Jednak potrzebne jest potwierdzenie w formie testu statystycznego.
+
+### Najpierw przeprowadzony zostanie test Shapiro-Wilka, w celu sprawdzenia czy rozkłady są normalne.
+
+
+
+#### **Hipoteza zerowa - próba badawcza pochodzi z populacji o rozkładzie normalnym.**
+#### **Hipoteza alternatywna - próba badawcza nie pochodzi z populacji o rozkładzie normalnym.**
+```{r}
+shapiro.test(tweaked_gas$failures_count)
+shapiro.test(normal_gas$failures_count)
+```
+Wartość p dla obu rozkładów wyszła mniejsza niż 0,05, więc odrzucamy hipotezę zerową i przyjmujemy hipotezę alternatywną, że rozkłady nie są normalne, zatem warto użyć testu Wilcoxona.
+
+### Test Wilcoxona.
+
+#### **Hipoteza zerowa - Paliwo normalne jest tak samo awariogenne jak paliwo podrasowane.** 
+#### **Hipoteza alternatywna - Paliwo podrasowane jest bardziej awariogenne niż paliwo normalne.**
+```{r}
+wilcox.test(tweaked_gas$failures_count, normal_gas$failures_count, alternative='greater')
+
+```
+Wartość p wyszła mniejsza niż 0,05, więc odrzucamy hipotezę zerową, że paliwo normalne jest tak samo awariogenne jak paliwo podrasowane i przyjmujemy hipotezę alternatywną, że paliwo podrasowane jest bardziej awariogenne niż paliwo normalne.
+
+## Sprawdzenie czy zwykły kierowca odczuje większą awariogenność paliwa podrasowanego.
+```{r}
+failures_normal <- sum(normal_gas$failures_count)
+failures_tweaked <- sum(tweaked_gas$failures_count)
+```
+Przyjęcie, że polski kierowca przejeżdża rocznie średnio 8600 km(badania przeprowadzone przez Instytutu Badań Rynku Motoryzacyjnego Samar)
+```{r}
+avg_yearly_km <- 8600
+```
+Wyliczenie średniej liczby kilometrów przejechanych na paliwie podrasowanym potrzebnej do wystąpienia awarii.
+```{r}
+km_until_failure <- 1 /( failures_tweaked / sum_km_tweaked )
+km_until_failure
+```
+Wyliczenie średniej rocznej liczby kilometrów przejechanych na paliwie podrasowanym potrzebnej do wystąpienia awarii w ciągu 10 lat.
+```{r}
+avg_yearly_km_failure_need <- km_until_failure / 10
+avg_yearly_km_failure_need
+```
+
+Wizualizacja danych na wykresie
+```{r}
+
+Number_of_years <- c(1:10)
+km <- rep(avg_yearly_km_failure_need * 10, times='10')
+plot(Number_of_years, km, type='l', xlim = c(1,10), ylim = c(0,700000), col='red', xlab = "Ilość lat")
+avg_yearly_km_us <- 21688
+lines(Number_of_years, avg_yearly_km * Number_of_years, col="green")
+lines(Number_of_years, avg_yearly_km_us * Number_of_years, col='blue')
+legend(1, 500000, legend= c('Średnia ilość km wymagana do pojawienia się awarii', 'Średnia eksploatacja w PL', 'Średnia eksploatacja w US'), col=c('red','green','blue'), lty = 1:1)
+
+```
+
+Na wykresie wyraźnie widać, że przeciętny kierowca, nawet w (dużo bardziej zmotoryzawanym od Polski) USA, zwykły kierowca nie zauważy większej awariogenności paliwa podrasowanego.
+
+## Podsumowanie i wnioski
+
+#### **Czy paliwo podrasowane pozwala przejechać więcej kilometrów na jednym baku niż zwykłe paliwo?**
+
+ Paliwo podrasowane średnio pozwala przejechać więcej kilometrów na jednym baku, co zostało sprawdzone za pomocą testu statystycznego t-studenta.
+
+#### **Czy paliwo podrasowane jest bardziej awariogenne niż paliwo zwykłe?**
+
+ Paliwo podrasowane jest bardziej awariogenne niż paliwo zwykłe, co zostało sprawdzone za pomocą testu statystycznego Wilcoxona.
+
+#### **Czy przeciętny kierowca jest w stanie odczuć większą awariogenność paliwa podrasowanego?**
+
+ Mając na uwadzę średnią roczną liczbę kilometrów przejechaną przez polskich kierowców, zwykły użytkownik nie odczuje większej awariogenności paliwa podrasowanego.
